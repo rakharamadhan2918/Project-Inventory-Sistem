@@ -217,7 +217,7 @@ export default function Penjualan() {
       </main>
 
       <footer className="mt-auto py-6 px-10 border-t border-slate-200 text-center text-slate-500 text-sm">
-        © 2024 Inventory System Pro. All rights reserved.
+        © 2026 Inventory System Pro. All rights reserved.
       </footer>
     </div>
   )
