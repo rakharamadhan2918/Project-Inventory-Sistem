@@ -1,52 +1,89 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import api from '../api'
 
 const CATEGORIES = ['Oli & Pelumas', 'Kelistrikan', 'Rem', 'Mesin', 'Body & Frame', 'Filter', 'Transmisi', 'Lainnya']
 
 export default function KelolaBarang() {
   const navigate = useNavigate()
   const [items, setItems] = useState([])
+  const [suppliers, setSuppliers] = useState([])
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState(null)
   const [deleteId, setDeleteId] = useState(null)
-  const [form, setForm] = useState({ name: '', category: '', stock: '', supplier: '' })
+  const [form, setForm] = useState({ item_name: '', category: '', stock_level: '', supplier_id: '' })
   const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (!localStorage.getItem('isLogin')) navigate('/login')
-    setItems(JSON.parse(localStorage.getItem('items') || '[]'))
+    fetchItems()
+    fetchSuppliers()
   }, [])
 
-  const saveItems = (data) => {
-    setItems(data)
-    localStorage.setItem('items', JSON.stringify(data))
+  const fetchItems = async () => {
+    try {
+      const res = await api.get('/items')
+      setItems(res.data)
+    } catch (err) {
+      console.error('Gagal fetch items:', err)
+    }
   }
 
-  const handleSubmit = () => {
-    if (!form.name || !form.category || form.stock === '') return alert('Semua field wajib diisi!')
-    if (editItem) {
-      saveItems(items.map(i => i.id === editItem.id ? { ...i, ...form, stock: parseInt(form.stock) } : i))
-    } else {
-      saveItems([...items, { id: Date.now().toString(), ...form, stock: parseInt(form.stock), createdAt: new Date().toISOString() }])
+  const fetchSuppliers = async () => {
+    try {
+      const res = await api.get('/suppliers')
+      setSuppliers(res.data)
+    } catch (err) {
+      console.error('Gagal fetch suppliers:', err)
     }
-    setShowForm(false)
-    setEditItem(null)
-    setForm({ name: '', category: '', stock: '', supplier: '' })
+  }
+
+  const handleSubmit = async () => {
+    if (!form.item_name || !form.category || form.stock_level === '')
+      return alert('Semua field wajib diisi!')
+    setLoading(true)
+    try {
+      if (editItem) {
+        await api.put(`/items/${editItem.id}`, form)
+      } else {
+        const id = Date.now().toString().slice(-8).padStart(8, '0')
+        await api.post('/items', { ...form, id })
+      }
+      await fetchItems()
+      setShowForm(false)
+      setEditItem(null)
+      setForm({ item_name: '', category: '', stock_level: '', supplier_id: '' })
+    } catch (err) {
+      alert('Gagal menyimpan data!')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleEdit = (item) => {
     setEditItem(item)
-    setForm({ name: item.name, category: item.category, stock: item.stock, supplier: item.supplier || '' })
+    setForm({
+      item_name: item.item_name,
+      category: item.category,
+      stock_level: item.stock_level,
+      supplier_id: item.supplier_id || ''
+    })
     setShowForm(true)
   }
 
-  const handleDelete = (id) => {
-    saveItems(items.filter(i => i.id !== id))
-    setDeleteId(null)
+  const handleDelete = async (id) => {
+    try {
+      await api.delete(`/items/${id}`)
+      await fetchItems()
+      setDeleteId(null)
+    } catch (err) {
+      alert('Gagal menghapus data!')
+    }
   }
 
   const filtered = items.filter(i =>
-    i.name.toLowerCase().includes(search.toLowerCase()) ||
+    i.item_name.toLowerCase().includes(search.toLowerCase()) ||
     i.category.toLowerCase().includes(search.toLowerCase())
   )
 
@@ -83,7 +120,7 @@ export default function KelolaBarang() {
           <span className="text-sm font-medium text-[#1F3864]">Kelola Data Barang</span>
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-white rounded-xl border border-slate-200 p-5 flex items-center gap-4 shadow-sm">
             <div className="bg-blue-100 p-3 rounded-full">
@@ -100,7 +137,7 @@ export default function KelolaBarang() {
             </div>
             <div>
               <p className="text-sm text-slate-500">Stok Aman</p>
-              <p className="text-2xl font-bold text-green-600">{items.filter(i => i.stock >= 5).length}</p>
+              <p className="text-2xl font-bold text-green-600">{items.filter(i => i.stock_level >= 5).length}</p>
             </div>
           </div>
           <div className="bg-white rounded-xl border border-slate-200 p-5 flex items-center gap-4 shadow-sm">
@@ -109,7 +146,7 @@ export default function KelolaBarang() {
             </div>
             <div>
               <p className="text-sm text-slate-500">Stok Menipis</p>
-              <p className="text-2xl font-bold text-red-600">{items.filter(i => i.stock < 5).length}</p>
+              <p className="text-2xl font-bold text-red-600">{items.filter(i => i.stock_level < 5).length}</p>
             </div>
           </div>
         </div>
@@ -122,7 +159,7 @@ export default function KelolaBarang() {
               value={search} onChange={e => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1F3864]" />
           </div>
-          <button onClick={() => { setEditItem(null); setForm({ name: '', category: '', stock: '', supplier: '' }); setShowForm(true) }}
+          <button onClick={() => { setEditItem(null); setForm({ item_name: '', category: '', stock_level: '', supplier_id: '' }); setShowForm(true) }}
             className="bg-[#1F3864] hover:bg-blue-900 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm">
             <span className="material-symbols-outlined text-sm">add</span>
             Tambah Barang Baru
@@ -147,34 +184,32 @@ export default function KelolaBarang() {
                 <tr>
                   <td colSpan="6" className="text-center py-12 text-slate-400">
                     <span className="material-symbols-outlined text-5xl block mb-2">inventory_2</span>
-                    {search ? 'Barang tidak ditemukan' : 'Belum ada data barang. Klik "Tambah Barang Baru" untuk memulai.'}
+                    {search ? 'Barang tidak ditemukan' : 'Belum ada data barang'}
                   </td>
                 </tr>
               ) : (
                 filtered.map((item, idx) => (
                   <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-5 py-4 text-slate-400 text-xs">{String(idx + 1).padStart(3, '0')}</td>
-                    <td className="px-5 py-4 font-semibold text-slate-800">{item.name}</td>
+                    <td className="px-5 py-4 font-semibold text-slate-800">{item.item_name}</td>
                     <td className="px-5 py-4">
                       <span className="bg-blue-100 text-blue-700 text-xs font-medium px-2 py-1 rounded-full">{item.category}</span>
                     </td>
                     <td className="px-5 py-4">
-                      <span className={`font-bold text-sm px-2 py-1 rounded-lg ${item.stock < 5 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                        {item.stock} unit
+                      <span className={`font-bold text-sm px-2 py-1 rounded-lg ${item.stock_level < 5 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                        {item.stock_level} unit
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-slate-500">{item.supplier || '-'}</td>
+                    <td className="px-5 py-4 text-slate-500">{item.supplier_name || '-'}</td>
                     <td className="px-5 py-4">
                       <div className="flex gap-2 justify-center">
                         <button onClick={() => handleEdit(item)}
-                          className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition-colors">
-                          <span className="material-symbols-outlined text-sm">edit</span>
-                          Edit
+                          className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium">
+                          <span className="material-symbols-outlined text-sm">edit</span>Edit
                         </button>
                         <button onClick={() => setDeleteId(item.id)}
-                          className="flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition-colors">
-                          <span className="material-symbols-outlined text-sm">delete</span>
-                          Hapus
+                          className="flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium">
+                          <span className="material-symbols-outlined text-sm">delete</span>Hapus
                         </button>
                       </div>
                     </td>
@@ -189,10 +224,9 @@ export default function KelolaBarang() {
             </div>
           )}
         </div>
-
       </main>
 
-      {/* Modal Form Tambah/Edit */}
+      {/* Modal Form */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
@@ -208,7 +242,7 @@ export default function KelolaBarang() {
             <div className="p-6 space-y-4">
               <div>
                 <label className="text-sm font-semibold text-slate-700 block mb-1">Nama Barang <span className="text-red-500">*</span></label>
-                <input value={form.name} onChange={e => setForm({...form, name: e.target.value})}
+                <input value={form.item_name} onChange={e => setForm({...form, item_name: e.target.value})}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Contoh: Oli Shell Helix 1L" />
               </div>
@@ -224,16 +258,21 @@ export default function KelolaBarang() {
                 </div>
               </div>
               <div>
-                <label className="text-sm font-semibold text-slate-700 block mb-1">Stok Awal <span className="text-red-500">*</span></label>
-                <input type="number" min="0" value={form.stock} onChange={e => setForm({...form, stock: e.target.value})}
+                <label className="text-sm font-semibold text-slate-700 block mb-1">Stok <span className="text-red-500">*</span></label>
+                <input type="number" min="0" value={form.stock_level} onChange={e => setForm({...form, stock_level: e.target.value})}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="0" />
               </div>
               <div>
                 <label className="text-sm font-semibold text-slate-700 block mb-1">Supplier</label>
-                <input value={form.supplier} onChange={e => setForm({...form, supplier: e.target.value})}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Nama supplier (opsional)" />
+                <div className="relative">
+                  <select value={form.supplier_id} onChange={e => setForm({...form, supplier_id: e.target.value})}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none">
+                    <option value="">-- Pilih Supplier --</option>
+                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.supplier_name}</option>)}
+                  </select>
+                  <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-sm">expand_more</span>
+                </div>
               </div>
             </div>
             <div className="p-6 border-t border-slate-100 flex gap-3">
@@ -241,16 +280,16 @@ export default function KelolaBarang() {
                 className="flex-1 border border-slate-300 text-slate-700 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-50">
                 Batal
               </button>
-              <button onClick={handleSubmit}
-                className="flex-1 bg-[#1F3864] text-white py-2.5 rounded-lg text-sm font-bold hover:bg-blue-900">
-                {editItem ? 'Simpan Perubahan' : 'Tambah Barang'}
+              <button onClick={handleSubmit} disabled={loading}
+                className="flex-1 bg-[#1F3864] text-white py-2.5 rounded-lg text-sm font-bold hover:bg-blue-900 disabled:opacity-50">
+                {loading ? 'Menyimpan...' : editItem ? 'Simpan Perubahan' : 'Tambah Barang'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal Konfirmasi Hapus */}
+      {/* Modal Hapus */}
       {deleteId && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm text-center p-6">

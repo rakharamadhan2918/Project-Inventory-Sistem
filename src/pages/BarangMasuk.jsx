@@ -1,54 +1,61 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-
-const CATEGORIES = ['Oli & Pelumas', 'Kelistrikan', 'Rem', 'Mesin', 'Body & Frame', 'Filter', 'Transmisi', 'Lainnya']
+import api from '../api'
 
 export default function BarangMasuk() {
   const navigate = useNavigate()
   const [items, setItems] = useState([])
+  const [suppliers, setSuppliers] = useState([])
   const [recentLogs, setRecentLogs] = useState([])
-  const [form, setForm] = useState({ itemId: '', category: '', quantity: '', date: '', supplier: '', note: '' })
+  const [form, setForm] = useState({ itemId: '', quantity: '', date: '', supplier_id: '', note: '' })
   const [success, setSuccess] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (!localStorage.getItem('isLogin')) navigate('/login')
-    setItems(JSON.parse(localStorage.getItem('items') || '[]'))
-    setRecentLogs(JSON.parse(localStorage.getItem('stockIn') || '[]').slice(-3).reverse())
+    fetchData()
   }, [])
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    if (!form.itemId || !form.quantity || !form.date) return alert('Nama barang, jumlah, dan tanggal wajib diisi!')
-
-    const allItems = JSON.parse(localStorage.getItem('items') || '[]')
-    const selectedItem = allItems.find(i => i.id === form.itemId)
-    if (!selectedItem) return
-
-    // Update stok barang
-    const updatedItems = allItems.map(i =>
-      i.id === form.itemId ? { ...i, stock: i.stock + parseInt(form.quantity) } : i
-    )
-    localStorage.setItem('items', JSON.stringify(updatedItems))
-
-    // Simpan log barang masuk
-    const stockIn = JSON.parse(localStorage.getItem('stockIn') || '[]')
-    const newLog = {
-      id: Date.now(),
-      itemId: form.itemId,
-      itemName: selectedItem.name,
-      category: selectedItem.category,
-      quantity: parseInt(form.quantity),
-      date: form.date,
-      supplier: form.supplier,
-      note: form.note,
-      createdAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+  const fetchData = async () => {
+    try {
+      const [itemsRes, suppliersRes, logsRes] = await Promise.all([
+        api.get('/items'),
+        api.get('/suppliers'),
+        api.get('/stock-in')
+      ])
+      setItems(itemsRes.data)
+      setSuppliers(suppliersRes.data)
+      setRecentLogs(logsRes.data.slice(0, 3))
+    } catch (err) {
+      console.error('Gagal fetch data:', err)
     }
-    localStorage.setItem('stockIn', JSON.stringify([...stockIn, newLog]))
+  }
 
-    setSuccess(true)
-    setForm({ itemId: '', category: '', quantity: '', date: '', supplier: '', note: '' })
-    setRecentLogs([newLog, ...recentLogs].slice(0, 3))
-    setTimeout(() => setSuccess(false), 3000)
+  const selectedItem = items.find(i => i.id === form.itemId)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.itemId || !form.quantity || !form.date)
+      return alert('Nama barang, jumlah, dan tanggal wajib diisi!')
+
+    setLoading(true)
+    try {
+      await api.post('/stock-in', {
+        item_id: form.itemId,
+        supplier_id: form.supplier_id || null,
+        quantity: parseInt(form.quantity),
+        entry_date: form.date,
+        note: form.note
+      })
+      setSuccess(true)
+      setForm({ itemId: '', quantity: '', date: '', supplier_id: '', note: '' })
+      await fetchData()
+      setTimeout(() => setSuccess(false), 3000)
+    } catch (err) {
+      alert('Gagal menyimpan data!')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -66,7 +73,8 @@ export default function BarangMasuk() {
               <p className="text-xs text-blue-100/70">Manajemen Stok Inventaris</p>
             </div>
           </div>
-          <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 hover:bg-white/10 px-3 py-2 rounded-lg transition-colors text-sm">
+          <button onClick={() => navigate('/dashboard')}
+            className="flex items-center gap-2 hover:bg-white/10 px-3 py-2 rounded-lg transition-colors text-sm">
             <span className="material-symbols-outlined text-xl">arrow_back</span>
             Kembali
           </button>
@@ -83,7 +91,7 @@ export default function BarangMasuk() {
           <span className="text-sm font-medium text-[#1F3864]">Stok Masuk</span>
         </div>
 
-        {/* Notifikasi Sukses */}
+        {/* Sukses */}
         {success && (
           <div className="mb-6 p-4 bg-green-50 border border-green-300 text-green-700 rounded-xl flex items-center gap-3 font-medium">
             <span className="material-symbols-outlined">check_circle</span>
@@ -100,7 +108,7 @@ export default function BarangMasuk() {
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Formulir Input Barang</h2>
-                <p className="text-sm text-slate-500">Pastikan data yang dimasukkan sudah sesuai dengan surat jalan/invoice.</p>
+                <p className="text-sm text-slate-500">Pastikan data sesuai dengan surat jalan/invoice.</p>
               </div>
             </div>
           </div>
@@ -116,7 +124,7 @@ export default function BarangMasuk() {
                   <select value={form.itemId} onChange={e => setForm({...form, itemId: e.target.value})}
                     className="w-full pl-10 pr-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13] outline-none appearance-none">
                     <option value="">-- Pilih Barang --</option>
-                    {items.map(i => <option key={i.id} value={i.id}>{i.name} (Stok: {i.stock})</option>)}
+                    {items.map(i => <option key={i.id} value={i.id}>{i.item_name} (Stok: {i.stock_level})</option>)}
                   </select>
                   <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
                 </div>
@@ -125,13 +133,14 @@ export default function BarangMasuk() {
                 )}
               </div>
 
-              {/* Kategori (auto) */}
+              {/* Kategori auto */}
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold text-slate-700">Kategori</label>
                 <div className="relative">
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl">category</span>
-                  <input value={form.itemId ? (items.find(i => i.id === form.itemId)?.category || '') : ''}
-                    readOnly className="w-full pl-10 pr-4 py-3 rounded-lg border border-slate-200 bg-slate-50 text-slate-500 outline-none" placeholder="Otomatis terisi" />
+                  <input value={selectedItem ? selectedItem.category : ''}
+                    readOnly className="w-full pl-10 pr-4 py-3 rounded-lg border border-slate-200 bg-slate-50 text-slate-500 outline-none"
+                    placeholder="Otomatis terisi" />
                 </div>
               </div>
 
@@ -140,7 +149,8 @@ export default function BarangMasuk() {
                 <label className="text-sm font-semibold text-slate-700">Jumlah (Qty)</label>
                 <div className="relative">
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl">numbers</span>
-                  <input type="number" min="1" value={form.quantity} onChange={e => setForm({...form, quantity: e.target.value})}
+                  <input type="number" min="1" value={form.quantity}
+                    onChange={e => setForm({...form, quantity: e.target.value})}
                     className="w-full pl-10 pr-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13] outline-none"
                     placeholder="0" />
                 </div>
@@ -151,19 +161,23 @@ export default function BarangMasuk() {
                 <label className="text-sm font-semibold text-slate-700">Tanggal Masuk</label>
                 <div className="relative">
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl">calendar_today</span>
-                  <input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})}
+                  <input type="date" value={form.date}
+                    onChange={e => setForm({...form, date: e.target.value})}
                     className="w-full pl-10 pr-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13] outline-none" />
                 </div>
               </div>
 
-              {/* Pemasok */}
+              {/* Supplier */}
               <div className="flex flex-col gap-2 md:col-span-2">
                 <label className="text-sm font-semibold text-slate-700">Pemasok (Vendor)</label>
                 <div className="relative">
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl">store</span>
-                  <input value={form.supplier} onChange={e => setForm({...form, supplier: e.target.value})}
-                    className="w-full pl-10 pr-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13] outline-none"
-                    placeholder="Nama pemasok/vendor" />
+                  <select value={form.supplier_id} onChange={e => setForm({...form, supplier_id: e.target.value})}
+                    className="w-full pl-10 pr-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13] outline-none appearance-none">
+                    <option value="">-- Pilih Supplier --</option>
+                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.supplier_name}</option>)}
+                  </select>
+                  <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
                 </div>
               </div>
 
@@ -182,10 +196,10 @@ export default function BarangMasuk() {
                 className="px-6 py-3 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 transition-colors">
                 Batal
               </button>
-              <button type="submit"
-                className="px-8 py-3 rounded-lg bg-green-500 hover:bg-green-600 text-white font-bold flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95">
+              <button type="submit" disabled={loading}
+                className="px-8 py-3 rounded-lg bg-green-500 hover:bg-green-600 text-white font-bold flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 disabled:opacity-50">
                 <span className="material-symbols-outlined">save</span>
-                Simpan Data
+                {loading ? 'Menyimpan...' : 'Simpan Data'}
               </button>
             </div>
           </form>
@@ -207,7 +221,7 @@ export default function BarangMasuk() {
               {recentLogs.length === 0 ? (
                 <p className="text-xs text-slate-500 mt-1">Belum ada riwayat</p>
               ) : (
-                <p className="text-xs text-slate-600 mt-1">{recentLogs[0].itemName} ({recentLogs[0].quantity} Unit) - {recentLogs[0].createdAt}</p>
+                <p className="text-xs text-slate-600 mt-1">{recentLogs[0].item_name} ({recentLogs[0].quantity} Unit)</p>
               )}
             </div>
           </div>

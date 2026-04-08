@@ -1,21 +1,37 @@
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
+import api from '../api'
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const [items, setItems] = useState([])
+  const [todaySales, setTodaySales] = useState(0)
   const [lowStockItems, setLowStockItems] = useState([])
-  const [totalBarang, setTotalBarang] = useState(0)
 
   useEffect(() => {
-    const isLogin = localStorage.getItem('isLogin')
-    if (!isLogin) navigate('/login')
-    const items = JSON.parse(localStorage.getItem('items') || '[]')
-    setTotalBarang(items.length)
-    setLowStockItems(items.filter(item => item.stock < 5))
+    if (!localStorage.getItem('isLogin')) navigate('/login')
+    fetchData()
   }, [])
+
+  const fetchData = async () => {
+    try {
+      const res = await api.get('/items')
+      const allItems = res.data
+      setItems(allItems)
+      setLowStockItems(allItems.filter(i => i.stock_level < 5))
+
+      const salesRes = await api.get('/sales')
+      const today = new Date().toISOString().split('T')[0]
+      setTodaySales(salesRes.data.filter(s => s.sale_date === today).length)
+    } catch (err) {
+      console.error('Gagal fetch data:', err)
+    }
+  }
 
   const handleLogout = () => {
     localStorage.removeItem('isLogin')
+    localStorage.removeItem('token')
+    localStorage.removeItem('username')
     navigate('/login')
   }
 
@@ -28,7 +44,7 @@ export default function Dashboard() {
   ]
 
   return (
-    <div className="bg-[#f8f6f6] min-h-screen text-slate-900">
+    <div className="bg-[#f8f6f6] min-h-screen">
 
       {/* Header */}
       <header className="bg-[#1F3864] text-white shadow-lg sticky top-0 z-50">
@@ -43,10 +59,8 @@ export default function Dashboard() {
                 <span className="text-xs text-blue-200">Logged in as</span>
                 <span className="text-sm font-semibold">Owner</span>
               </div>
-              <button
-                onClick={handleLogout}
-                className="bg-[#ec5b13] hover:bg-orange-600 text-white px-5 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2"
-              >
+              <button onClick={handleLogout}
+                className="bg-[#ec5b13] hover:bg-orange-600 text-white px-5 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2">
                 <span className="material-symbols-outlined text-sm">logout</span>
                 Keluar
               </button>
@@ -63,7 +77,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-500">Total Barang</p>
-                <p className="text-3xl font-bold mt-1">{totalBarang}</p>
+                <p className="text-3xl font-bold mt-1">{items.length}</p>
               </div>
               <div className="bg-blue-100 p-3 rounded-full text-blue-600">
                 <span className="material-symbols-outlined text-3xl">inventory_2</span>
@@ -74,9 +88,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-500">Transaksi Hari Ini</p>
-                <p className="text-3xl font-bold mt-1">
-                  {JSON.parse(localStorage.getItem('sales') || '[]').filter(s => s.date === new Date().toISOString().split('T')[0]).length}
-                </p>
+                <p className="text-3xl font-bold mt-1">{todaySales}</p>
               </div>
               <div className="bg-green-100 p-3 rounded-full text-green-600">
                 <span className="material-symbols-outlined text-3xl">receipt_long</span>
@@ -106,11 +118,8 @@ export default function Dashboard() {
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-10">
           {menus.map((menu) => (
-            <button
-              key={menu.path}
-              onClick={() => navigate(menu.path)}
-              className={`bg-white p-5 rounded-xl border shadow-sm hover:shadow-md transition-all group text-left ${menu.highlight ? 'border-l-4 border-[#ec5b13]/30 hover:border-[#ec5b13]' : 'border-slate-200 hover:border-[#ec5b13]/50'}`}
-            >
+            <button key={menu.path} onClick={() => navigate(menu.path)}
+              className={`bg-white p-5 rounded-xl border shadow-sm hover:shadow-md transition-all group text-left ${menu.highlight ? 'border-l-4 border-[#ec5b13]/30 hover:border-[#ec5b13]' : 'border-slate-200 hover:border-[#ec5b13]/50'}`}>
               <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-4 transition-colors ${menu.highlight ? 'bg-[#ec5b13]/10' : 'bg-slate-100 group-hover:bg-[#ec5b13]/10'}`}>
                 <span className={`material-symbols-outlined ${menu.highlight ? 'text-[#ec5b13]' : 'text-slate-600 group-hover:text-[#ec5b13]'}`}>{menu.icon}</span>
               </div>
@@ -157,21 +166,19 @@ export default function Dashboard() {
                 ) : (
                   lowStockItems.map((item) => (
                     <tr key={item.id} className="hover:bg-red-100/30 transition-colors">
-                      <td className="px-6 py-4 font-medium">{item.name}</td>
+                      <td className="px-6 py-4 font-medium">{item.item_name}</td>
                       <td className="px-6 py-4 text-sm text-slate-600">{item.category}</td>
                       <td className="px-6 py-4">
-                        <span className="font-bold text-red-600">{item.stock} Units</span>
+                        <span className="font-bold text-red-600">{item.stock_level} Units</span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${item.stock <= 2 ? 'bg-red-200 text-red-800' : 'bg-orange-200 text-orange-800'}`}>
-                          {item.stock <= 2 ? 'Kritis' : 'Rendah'}
+                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${item.stock_level <= 2 ? 'bg-red-200 text-red-800' : 'bg-orange-200 text-orange-800'}`}>
+                          {item.stock_level <= 2 ? 'Kritis' : 'Rendah'}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => navigate('/barang-masuk')}
-                          className="bg-[#ec5b13] text-white text-xs font-bold px-4 py-2 rounded shadow hover:bg-orange-600 transition-colors"
-                        >
+                        <button onClick={() => navigate('/barang-masuk')}
+                          className="bg-[#ec5b13] text-white text-xs font-bold px-4 py-2 rounded shadow hover:bg-orange-600 transition-colors">
                           Reorder
                         </button>
                       </td>
@@ -193,7 +200,6 @@ export default function Dashboard() {
       <footer className="mt-auto py-6 border-t border-slate-200 text-center text-slate-500 text-sm">
         <p>© 2024 Bengkel Jaya Motor - Professional Inventory Management System</p>
       </footer>
-
     </div>
   )
 }
