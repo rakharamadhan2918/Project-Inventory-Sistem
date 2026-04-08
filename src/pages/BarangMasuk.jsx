@@ -237,7 +237,7 @@ export default function BarangMasuk() {
       </main>
 
       <footer className="mt-12 py-6 px-6 text-center text-slate-400 text-sm border-t border-slate-200">
-        © 2024 Inventory System v2.1.0 - All Rights Reserved.
+        © 2026 Inventory System v2.1.0 - All Rights Reserved.
       </footer>
     </div>
   )
