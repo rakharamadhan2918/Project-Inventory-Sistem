@@ -10,11 +10,20 @@ export default function Penjualan() {
   const [selectedItem, setSelectedItem] = useState(null)
   const [stockStatus, setStockStatus] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [searchBarang, setSearchBarang] = useState('')
+  const [showDropdown, setShowDropdown] = useState(false)
 
   useEffect(() => {
     if (!localStorage.getItem('isLogin')) navigate('/login')
     fetchData()
   }, [])
+  useEffect(() => {
+  const handleClickOutside = (e) => {
+    if (!e.target.closest('.relative')) setShowDropdown(false)
+  }
+  document.addEventListener('mousedown', handleClickOutside)
+  return () => document.removeEventListener('mousedown', handleClickOutside)
+}, [])
 
   const fetchData = async () => {
     try {
@@ -35,6 +44,7 @@ export default function Penjualan() {
     setSelectedItem(found || null)
     setStockStatus(null)
     setForm({ ...form, itemId })
+    setSearchBarang
   }
 
   const handleCekStok = () => {
@@ -108,20 +118,40 @@ export default function Penjualan() {
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-                {/* Pilih Barang */}
-                <div className="flex flex-col gap-2">
-                  <label className="text-slate-700 text-sm font-semibold">Pilih Barang</label>
-                  <div className="relative">
-                    <select value={form.itemId} onChange={e => handleItemChange(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 h-12 px-4 focus:ring-2 focus:ring-[#1F3864] outline-none appearance-none bg-white">
-                      <option value="">Cari sparepart...</option>
-                      {items.map(i => (
-                        <option key={i.id} value={i.id}>{i.item_name} — Stok: {i.stock_level}</option>
-                      ))}
-                    </select>
-                    <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
-                  </div>
-                </div>
+                {/* Pilih Barang - Searchable */}
+<div className="flex flex-col gap-2 relative">
+  <label className="text-slate-700 text-sm font-semibold">Pilih Barang</label>
+  <div className="relative">
+    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+    <input
+      type="text"
+      value={searchBarang}
+      onChange={e => { setSearchBarang(e.target.value); setShowDropdown(true); setForm({...form, itemId: ''}); setSelectedItem(null) }}
+      onFocus={() => setShowDropdown(true)}
+      placeholder="Ketik nama barang..."
+      className="w-full pl-10 pr-4 rounded-xl border border-slate-300 h-12 focus:ring-2 focus:ring-[#1F3864] outline-none"
+    />
+  </div>
+  {/* Dropdown hasil pencarian */}
+  {showDropdown && (
+    <div className="absolute top-20 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-lg z-50 max-h-48 overflow-y-auto">
+      {items.filter(i => i.item_name.toLowerCase().includes(searchBarang.toLowerCase())).length === 0 ? (
+        <div className="px-4 py-3 text-slate-400 text-sm">Barang tidak ditemukan</div>
+      ) : (
+        items.filter(i => i.item_name.toLowerCase().includes(searchBarang.toLowerCase())).map(i => (
+          <div key={i.id}
+            onClick={() => { handleItemChange(i.id); setSearchBarang(i.item_name); setShowDropdown(false) }}
+            className="px-4 py-3 hover:bg-blue-50 cursor-pointer flex justify-between items-center border-b border-slate-100 last:border-0">
+            <span className="font-medium text-sm">{i.item_name}</span>
+            <span className={`text-xs font-bold px-2 py-1 rounded-lg ${i.stock_level < 5 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+              Stok: {i.stock_level}
+            </span>
+          </div>
+        ))
+      )}
+    </div>
+  )}
+</div>
 
                 {/* Kategori */}
                 <div className="flex flex-col gap-2">
