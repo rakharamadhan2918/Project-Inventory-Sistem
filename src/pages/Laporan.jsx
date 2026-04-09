@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import api from '../api'
 
 const JENIS_LAPORAN = [
   { value: 'stok', label: 'Laporan Stok', icon: 'inventory_2', color: 'bg-blue-500' },
@@ -12,23 +13,49 @@ export default function Laporan() {
   const navigate = useNavigate()
   const [aktif, setAktif] = useState('stok')
   const [data, setData] = useState([])
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (!localStorage.getItem('isLogin')) navigate('/login')
     loadData('stok')
   }, [])
 
-  const loadData = (jenis) => {
+  const loadData = async (jenis) => {
     setAktif(jenis)
-    if (jenis === 'stok') setData(JSON.parse(localStorage.getItem('items') || '[]'))
-    else if (jenis === 'masuk') setData(JSON.parse(localStorage.getItem('stockIn') || '[]').reverse())
-    else if (jenis === 'keluar') setData(JSON.parse(localStorage.getItem('sales') || '[]').reverse())
-    else if (jenis === 'koreksi') setData(JSON.parse(localStorage.getItem('stockAdjustments') || '[]').reverse())
+    setLoading(true)
+    try {
+      let res
+      if (jenis === 'stok') res = await api.get('/items')
+      else if (jenis === 'masuk') res = await api.get('/stock-in')
+      else if (jenis === 'keluar') res = await api.get('/sales')
+      else if (jenis === 'koreksi') res = await api.get('/adjustments')
+      setData(res.data)
+    } catch (err) {
+      console.error('Gagal fetch laporan:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleCetak = () => window.print()
 
-  const renderTabel = () => {
+  const aktifInfo = JENIS_LAPORAN.find(j => j.value === aktif)
+
+  const getHeaders = () => {
+    if (aktif === 'stok') return ['No', 'Nama Barang', 'Kategori', 'Stok', 'Supplier']
+    if (aktif === 'masuk') return ['No', 'Nama Barang', 'Kategori', 'Jumlah Masuk', 'Supplier', 'Tanggal']
+    if (aktif === 'keluar') return ['No', 'Nama Barang', 'Kategori', 'Jumlah Keluar', 'Stok Sebelum', 'Stok Sesudah', 'Tanggal']
+    if (aktif === 'koreksi') return ['No', 'Nama Barang', 'Tipe', 'Jumlah', 'Alasan', 'Waktu']
+  }
+
+  const renderRows = () => {
+    if (loading) return (
+      <tr><td colSpan="10" className="px-6 py-12 text-center text-slate-400">
+        <span className="material-symbols-outlined animate-spin text-3xl block mb-2">refresh</span>
+        Memuat data...
+      </td></tr>
+    )
+
     if (data.length === 0) return (
       <tr><td colSpan="10" className="px-6 py-12 text-center text-slate-400">
         <span className="material-symbols-outlined text-5xl block mb-2">description</span>
@@ -39,72 +66,64 @@ export default function Laporan() {
     if (aktif === 'stok') return data.map((item, i) => (
       <tr key={item.id} className="hover:bg-slate-50 border-b border-slate-100">
         <td className="px-5 py-3 text-slate-400 text-xs">{i + 1}</td>
-        <td className="px-5 py-3 font-medium">{item.name}</td>
+        <td className="px-5 py-3 font-medium">{item.item_name}</td>
         <td className="px-5 py-3">
           <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">{item.category}</span>
         </td>
         <td className="px-5 py-3">
-          <span className={`font-bold text-sm px-2 py-1 rounded-lg ${item.stock < 5 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-            {item.stock} unit
+          <span className={`font-bold text-sm px-2 py-1 rounded-lg ${item.stock_level < 5 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+            {item.stock_level} unit
           </span>
         </td>
-        <td className="px-5 py-3 text-slate-500">{item.supplier || '-'}</td>
+        <td className="px-5 py-3 text-slate-500">{item.supplier_name || '-'}</td>
       </tr>
     ))
 
     if (aktif === 'masuk') return data.map((item, i) => (
       <tr key={item.id} className="hover:bg-slate-50 border-b border-slate-100">
         <td className="px-5 py-3 text-slate-400 text-xs">{i + 1}</td>
-        <td className="px-5 py-3 font-medium">{item.itemName}</td>
+        <td className="px-5 py-3 font-medium">{item.item_name}</td>
         <td className="px-5 py-3">
           <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">{item.category}</span>
         </td>
         <td className="px-5 py-3 font-bold text-green-600">+{item.quantity} unit</td>
-        <td className="px-5 py-3 text-slate-500">{item.supplier || '-'}</td>
-        <td className="px-5 py-3 text-slate-500">{item.date}</td>
+        <td className="px-5 py-3 text-slate-500">{item.supplier_name || '-'}</td>
+        <td className="px-5 py-3 text-slate-500">{item.entry_date?.split('T')[0]}</td>
       </tr>
     ))
 
     if (aktif === 'keluar') return data.map((item, i) => (
       <tr key={item.id} className="hover:bg-slate-50 border-b border-slate-100">
         <td className="px-5 py-3 text-slate-400 text-xs">{i + 1}</td>
-        <td className="px-5 py-3 font-medium">{item.itemName}</td>
+        <td className="px-5 py-3 font-medium">{item.item_name}</td>
         <td className="px-5 py-3">
           <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">{item.category}</span>
         </td>
         <td className="px-5 py-3 font-bold text-orange-600">-{item.quantity} unit</td>
-        <td className="px-5 py-3 text-slate-500">{item.stockBefore} → {item.stockAfter}</td>
-        <td className="px-5 py-3 text-slate-500">{item.date}</td>
+        <td className="px-5 py-3 text-slate-500">{item.stock_before}</td>
+        <td className="px-5 py-3 text-slate-500">{item.stock_after}</td>
+        <td className="px-5 py-3 text-slate-500">{item.sale_date}</td>
       </tr>
     ))
 
     if (aktif === 'koreksi') return data.map((item, i) => (
       <tr key={item.id} className="hover:bg-slate-50 border-b border-slate-100">
         <td className="px-5 py-3 text-slate-400 text-xs">{i + 1}</td>
-        <td className="px-5 py-3 font-medium">{item.itemName}</td>
+        <td className="px-5 py-3 font-medium">{item.item_name}</td>
         <td className="px-5 py-3">
           <span className={`text-xs font-bold px-2 py-1 rounded-full ${
-            item.tipe === 'rusak' ? 'bg-red-100 text-red-700' :
-            item.tipe === 'hilang' ? 'bg-orange-100 text-orange-700' :
+            item.type === 'rusak' ? 'bg-red-100 text-red-700' :
+            item.type === 'hilang' ? 'bg-orange-100 text-orange-700' :
             'bg-gray-100 text-gray-700'}`}>
-            {item.tipe}
+            {item.type}
           </span>
         </td>
         <td className="px-5 py-3 font-bold text-red-600">-{item.quantity} unit</td>
         <td className="px-5 py-3 text-slate-500 max-w-xs truncate">{item.note}</td>
-        <td className="px-5 py-3 text-slate-500 text-xs">{item.createdAt}</td>
+        <td className="px-5 py-3 text-slate-500 text-xs">{new Date(item.created_at).toLocaleString('id-ID')}</td>
       </tr>
     ))
   }
-
-  const getHeaders = () => {
-    if (aktif === 'stok') return ['No', 'Nama Barang', 'Kategori', 'Stok', 'Supplier']
-    if (aktif === 'masuk') return ['No', 'Nama Barang', 'Kategori', 'Jumlah Masuk', 'Supplier', 'Tanggal']
-    if (aktif === 'keluar') return ['No', 'Nama Barang', 'Kategori', 'Jumlah Keluar', 'Stok (Sblm→Ssdh)', 'Tanggal']
-    if (aktif === 'koreksi') return ['No', 'Nama Barang', 'Tipe', 'Jumlah', 'Alasan', 'Waktu']
-  }
-
-  const aktifInfo = JENIS_LAPORAN.find(j => j.value === aktif)
 
   return (
     <div className="bg-[#f8f6f6] min-h-screen font-sans">
@@ -139,7 +158,7 @@ export default function Laporan() {
           <span className="text-sm font-medium text-[#1F3864]">Laporan</span>
         </div>
 
-        {/* Pilih Jenis Laporan */}
+        {/* Pilih Jenis */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 print:hidden">
           {JENIS_LAPORAN.map(j => (
             <button key={j.value} onClick={() => loadData(j.value)}
@@ -148,15 +167,15 @@ export default function Laporan() {
                 <span className={`material-symbols-outlined ${aktif === j.value ? 'text-white' : j.color.replace('bg-', 'text-')}`}>{j.icon}</span>
               </div>
               <p className="font-bold text-sm">{j.label}</p>
-              <p className={`text-xs mt-0.5 ${aktif === j.value ? 'text-blue-200' : 'text-slate-400'}`}>{data.length && aktif === j.value ? data.length + ' data' : ''}</p>
+              <p className={`text-xs mt-0.5 ${aktif === j.value ? 'text-blue-200' : 'text-slate-400'}`}>
+                {aktif === j.value ? `${data.length} data` : ''}
+              </p>
             </button>
           ))}
         </div>
 
-        {/* Tabel Laporan */}
+        {/* Tabel */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-
-          {/* Toolbar Tabel */}
           <div className="p-5 border-b border-slate-100 flex items-center justify-between print:hidden">
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-lg ${aktifInfo?.color}/10`}>
@@ -174,7 +193,7 @@ export default function Laporan() {
             </button>
           </div>
 
-          {/* Print Header - hanya muncul saat print */}
+          {/* Print Header */}
           <div className="hidden print:block p-6 border-b">
             <div className="flex items-center gap-3 mb-2">
               <img src="/logo.png" className="h-12 w-12 object-contain" alt="Logo" />
@@ -196,9 +215,7 @@ export default function Laporan() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {renderTabel()}
-              </tbody>
+              <tbody>{renderRows()}</tbody>
             </table>
           </div>
 

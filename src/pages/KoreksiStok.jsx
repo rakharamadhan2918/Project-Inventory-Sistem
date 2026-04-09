@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import api from '../api'
 
 const TIPE_KOREKSI = [
   { value: 'rusak', label: 'Rusak', color: 'text-red-600', bg: 'bg-red-50 border-red-200', icon: 'broken_image' },
@@ -15,12 +16,25 @@ export default function KoreksiStok() {
   const [selectedItem, setSelectedItem] = useState(null)
   const [showConfirm, setShowConfirm] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (!localStorage.getItem('isLogin')) navigate('/login')
-    setItems(JSON.parse(localStorage.getItem('items') || '[]'))
-    setRiwayat(JSON.parse(localStorage.getItem('stockAdjustments') || '[]').reverse())
+    fetchData()
   }, [])
+
+  const fetchData = async () => {
+    try {
+      const [itemsRes, riwayatRes] = await Promise.all([
+        api.get('/items'),
+        api.get('/adjustments')
+      ])
+      setItems(itemsRes.data)
+      setRiwayat(riwayatRes.data)
+    } catch (err) {
+      console.error('Gagal fetch:', err)
+    }
+  }
 
   const handleItemChange = (itemId) => {
     const found = items.find(i => i.id === itemId)
@@ -33,44 +47,32 @@ export default function KoreksiStok() {
       return alert('Semua field wajib diisi!')
     if (form.note.length < 10)
       return alert('Alasan minimal 10 karakter!')
-    if (parseInt(form.quantity) > selectedItem.stock)
+    if (parseInt(form.quantity) > selectedItem.stock_level)
       return alert('Jumlah koreksi tidak boleh melebihi stok saat ini!')
     setShowConfirm(true)
   }
 
-  const handleKonfirmasi = () => {
-    const qty = parseInt(form.quantity)
-    const allItems = JSON.parse(localStorage.getItem('items') || '[]')
-    const updatedItems = allItems.map(i =>
-      i.id === form.itemId ? { ...i, stock: i.stock - qty } : i
-    )
-    localStorage.setItem('items', JSON.stringify(updatedItems))
-
-    const adjustments = JSON.parse(localStorage.getItem('stockAdjustments') || '[]')
-    const newLog = {
-      id: Date.now(),
-      itemId: form.itemId,
-      itemName: selectedItem.name,
-      tipe: form.tipe,
-      quantity: qty,
-      stockBefore: selectedItem.stock,
-      stockAfter: selectedItem.stock - qty,
-      note: form.note,
-      createdBy: localStorage.getItem('username') || 'owner',
-      createdAt: new Date().toLocaleString('id-ID')
+  const handleKonfirmasi = async () => {
+    setLoading(true)
+    try {
+      await api.post('/adjustments', {
+        item_id: form.itemId,
+        type: form.tipe,
+        quantity: parseInt(form.quantity),
+        note: form.note
+      })
+      await fetchData()
+      setShowConfirm(false)
+      setSuccess(true)
+      setForm({ itemId: '', tipe: '', quantity: '', note: '' })
+      setSelectedItem(null)
+      setTimeout(() => setSuccess(false), 3000)
+    } catch (err) {
+      alert('Gagal menyimpan koreksi!')
+    } finally {
+      setLoading(false)
     }
-    localStorage.setItem('stockAdjustments', JSON.stringify([...adjustments, newLog]))
-
-    setItems(updatedItems)
-    setRiwayat([newLog, ...riwayat])
-    setShowConfirm(false)
-    setSuccess(true)
-    setForm({ itemId: '', tipe: '', quantity: '', note: '' })
-    setSelectedItem(null)
-    setTimeout(() => setSuccess(false), 3000)
   }
-
-  const tipeInfo = TIPE_KOREKSI.find(t => t.value === form.tipe)
 
   return (
     <div className="bg-[#f8f6f6] min-h-screen font-sans">
@@ -110,7 +112,7 @@ export default function KoreksiStok() {
           <span className="material-symbols-outlined text-orange-500 mt-0.5">warning</span>
           <div>
             <p className="font-bold text-orange-800">Perhatian — Fitur Sensitif</p>
-            <p className="text-sm text-orange-700">Setiap koreksi stok akan tersimpan permanen sebagai audit trail dan tidak dapat dihapus.</p>
+            <p className="text-sm text-orange-700">Setiap koreksi stok tersimpan permanen sebagai audit trail dan tidak dapat dihapus.</p>
           </div>
         </div>
 
@@ -146,14 +148,13 @@ export default function KoreksiStok() {
                 <select value={form.itemId} onChange={e => handleItemChange(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none appearance-none">
                   <option value="">-- Pilih Barang --</option>
-                  {items.map(i => <option key={i.id} value={i.id}>{i.name} (Stok: {i.stock})</option>)}
+                  {items.map(i => <option key={i.id} value={i.id}>{i.item_name} (Stok: {i.stock_level})</option>)}
                 </select>
                 <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
               </div>
-              {/* Info stok real-time */}
               {selectedItem && (
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
-                  Stok saat ini: <b>{selectedItem.stock} unit</b> | Kategori: {selectedItem.category}
+                  Stok saat ini: <b>{selectedItem.stock_level} unit</b> | Kategori: {selectedItem.category}
                 </div>
               )}
             </div>
@@ -177,13 +178,13 @@ export default function KoreksiStok() {
             <div className="flex flex-col gap-2">
               <label className="text-sm font-semibold text-slate-700">
                 Jumlah yang Dikoreksi
-                {selectedItem && <span className="text-slate-400 font-normal"> (maks. {selectedItem.stock} unit)</span>}
+                {selectedItem && <span className="text-slate-400 font-normal"> (maks. {selectedItem.stock_level} unit)</span>}
               </label>
               <div className="relative">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">numbers</span>
-                <input type="number" min="1" max={selectedItem?.stock || 999}
+                <input type="number" min="1" max={selectedItem?.stock_level || 999}
                   value={form.quantity} onChange={e => setForm({...form, quantity: e.target.value})}
-                  className="w-full pl-10 pr-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none"
+                  className="w-full pl-10 pr-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-orange-400 outline-none"
                   placeholder="0" />
               </div>
             </div>
@@ -194,7 +195,7 @@ export default function KoreksiStok() {
                 Alasan / Keterangan <span className="text-red-500">*</span>
               </label>
               <textarea value={form.note} onChange={e => setForm({...form, note: e.target.value})}
-                className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none"
+                className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-orange-400 outline-none"
                 placeholder="Jelaskan alasan koreksi stok (min. 10 karakter)..." rows="3" />
               <p className={`text-xs ${form.note.length >= 10 ? 'text-green-600' : 'text-slate-400'}`}>
                 {form.note.length}/10 karakter minimum
@@ -202,17 +203,15 @@ export default function KoreksiStok() {
             </div>
 
             {/* Tombol */}
-            <div className="pt-2">
-              <button onClick={handleSimpan}
-                className="w-full py-3 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-bold flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95">
-                <span className="material-symbols-outlined">save</span>
-                Simpan Koreksi
-              </button>
-            </div>
+            <button onClick={handleSimpan} disabled={loading}
+              className="w-full py-3 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-bold flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 disabled:opacity-50">
+              <span className="material-symbols-outlined">save</span>
+              Simpan Koreksi
+            </button>
           </div>
         </div>
 
-        {/* Tabel Riwayat Koreksi */}
+        {/* Tabel Riwayat */}
         <div>
           <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
             <span className="material-symbols-outlined text-orange-500">history</span>
@@ -227,28 +226,26 @@ export default function KoreksiStok() {
                   <th className="px-4 py-3">Tipe</th>
                   <th className="px-4 py-3">Jumlah</th>
                   <th className="px-4 py-3">Alasan</th>
-                  <th className="px-4 py-3">Oleh</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {riwayat.length === 0 ? (
-                  <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400">Belum ada riwayat koreksi</td></tr>
+                  <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-400">Belum ada riwayat koreksi</td></tr>
                 ) : (
                   riwayat.map(r => (
                     <tr key={r.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 text-xs text-slate-500">{r.createdAt}</td>
-                      <td className="px-4 py-3 font-medium">{r.itemName}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500">{new Date(r.created_at).toLocaleString('id-ID')}</td>
+                      <td className="px-4 py-3 font-medium">{r.item_name}</td>
                       <td className="px-4 py-3">
                         <span className={`text-xs font-bold px-2 py-1 rounded-full ${
-                          r.tipe === 'rusak' ? 'bg-red-100 text-red-700' :
-                          r.tipe === 'hilang' ? 'bg-orange-100 text-orange-700' :
+                          r.type === 'rusak' ? 'bg-red-100 text-red-700' :
+                          r.type === 'hilang' ? 'bg-orange-100 text-orange-700' :
                           'bg-gray-100 text-gray-700'}`}>
-                          {r.tipe}
+                          {r.type}
                         </span>
                       </td>
                       <td className="px-4 py-3 font-bold text-red-600">-{r.quantity} unit</td>
                       <td className="px-4 py-3 text-slate-600 max-w-xs truncate">{r.note}</td>
-                      <td className="px-4 py-3 text-slate-500">{r.createdBy}</td>
                     </tr>
                   ))
                 )}
@@ -266,7 +263,7 @@ export default function KoreksiStok() {
             <div className="text-5xl mb-3">⚠️</div>
             <h2 className="text-lg font-bold text-slate-800 mb-2">Konfirmasi Koreksi Stok</h2>
             <p className="text-sm text-slate-500 mb-2">
-              Kurangi stok <b>{selectedItem?.name}</b> sebanyak <b>{form.quantity} unit</b>
+              Kurangi stok <b>{selectedItem?.item_name}</b> sebanyak <b>{form.quantity} unit</b>
             </p>
             <p className="text-xs text-orange-600 font-medium mb-5">
               ⚠️ Tindakan ini tidak dapat dibatalkan!
@@ -276,9 +273,9 @@ export default function KoreksiStok() {
                 className="flex-1 border border-slate-300 text-slate-700 py-2 rounded-lg text-sm font-medium hover:bg-slate-50">
                 Batal
               </button>
-              <button onClick={handleKonfirmasi}
-                className="flex-1 bg-orange-500 text-white py-2 rounded-lg text-sm font-bold hover:bg-orange-600">
-                Ya, Simpan
+              <button onClick={handleKonfirmasi} disabled={loading}
+                className="flex-1 bg-orange-500 text-white py-2 rounded-lg text-sm font-bold hover:bg-orange-600 disabled:opacity-50">
+                {loading ? 'Menyimpan...' : 'Ya, Simpan'}
               </button>
             </div>
           </div>
