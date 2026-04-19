@@ -71,9 +71,6 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="text-center text-xs text-gray-400 mt-6">
-          Username: <b>owner</b> | Password: <b>jaya123</b>
-        </p>
       </div>
     </div>
   )
